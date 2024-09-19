@@ -19,8 +19,8 @@ To do:
 - Making this into a pip package would also be useful. Please stay tuned for updates.
 
 ## Requirements 
-import numpy as np
-from astropy.io import fits
+- numpy
+- astropy.io
 
 ## Code use case example:
 ```
