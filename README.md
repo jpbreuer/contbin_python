@@ -15,9 +15,10 @@ This software is licensed under the GNU Public License.
 
 To do: 
 - I want to implement PSF information in the code. I will be trying to work on this on another branch.
+- Adding GPU optimization would be wonderful.
 
 
-Code Use case example:
+Code use case example:
 ```
 from contour_binning import *
 
