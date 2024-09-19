@@ -13,12 +13,16 @@ The jupyter notebook contains the testing code, also an example use case.
 
 This software is licensed under the GNU Public License.
 
-To do: 
+To do:
 - I want to implement PSF information in the code. I will be trying to work on this on another branch.
 - Adding GPU optimization would be wonderful.
+- Making this into a pip package would also be useful. Please stay tuned for updates.
 
+## Requirements 
+import numpy as np
+from astropy.io import fits
 
-Code use case example:
+## Code use case example:
 ```
 from contour_binning import *
 
