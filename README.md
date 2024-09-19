@@ -20,7 +20,7 @@ To do:
 
 ## Requirements 
 - numpy
-- astropy.io
+- astropy
 
 ## Code use case example:
 ```
