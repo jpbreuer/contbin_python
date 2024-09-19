@@ -13,11 +13,12 @@ The jupyter notebook contains the testing code, also an example use case.
 
 This software is licensed under the GNU Public License.
 
-To do: I want to implement PSF information in the code. I will be trying to work on this on another branch.
+To do: 
+- I want to implement PSF information in the code. I will be trying to work on this on another branch.
 
 
 Code Use case example:
-
+```
 from contour_binning import *
 
 os.chdir("/Users/jpbreuer/Scripts/contbin-python")
@@ -29,3 +30,4 @@ constrain_val = 1.5
 reg_bin = 1
 
 ContourBin(inputfile, sn_ratio, smooth, constrain_val, reg_bin)
+```
