@@ -1,11 +1,11 @@
 Metadata-Version: 2.1
 Name: pycontbin
-Version: 0.2.1
+Version: 0.2.2
 Summary: A Python implementation of the ContBin algorithm
 Home-page: https://github.com/jpbreuer/contbin_python
 Author: Jean-Paul Breuer
 Author-email: jeanpaul.breuer@gmail.com
-License: BSD 2-clause
+License: GNU Public License GPL-3.0
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Intended Audience :: Science/Research

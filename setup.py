@@ -2,14 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name='pycontbin',
-    version='0.2.1',    
+    version='0.2.2',    
     description='A Python implementation of the ContBin algorithm',
 	long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/jpbreuer/contbin_python',
     author='Jean-Paul Breuer',
     author_email='jeanpaul.breuer@gmail.com',    
-    license='BSD 2-clause',
+    license='GNU Public License GPL-3.0',
     packages=['pycontbin'],
     install_requires=['numpy',
 					  'astropy',
