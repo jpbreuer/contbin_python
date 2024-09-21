@@ -1,3 +1,21 @@
+Metadata-Version: 2.1
+Name: pycontbin
+Version: 0.2.1
+Summary: A Python implementation of the ContBin algorithm
+Home-page: https://github.com/jpbreuer/contbin_python
+Author: Jean-Paul Breuer
+Author-email: jeanpaul.breuer@gmail.com
+License: BSD 2-clause
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Intended Audience :: Science/Research
+Classifier: Operating System :: POSIX :: Linux
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: astropy
+Requires-Dist: pyds9
+
 # contbin_python
 
 This is a python re-implementation of the Jeremy Sanders contour binning algorithm, which was originally in c++. You can install it with `pip install pycontbin`, or upgrade it with `pip install --upgrade pycontbin`. Please note that this python build is under development and is subject to updates.
