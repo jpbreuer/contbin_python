@@ -6,6 +6,8 @@ import glob
 import pyds9
 import numpy as np
 from astropy.io import fits
+from astropy.wcs import WCS
+
 try:
 	from ciao_contrib.runtool import *
 	ciaoversion = os.popen('ciaover').read().split()[1]
@@ -35,7 +37,8 @@ class ContourBin:
 		bkg_exposure_filename=None,
 		noisemap_filename=None,
 		smoothed_filename=None,
-		psf_filename=None
+		psf_filename=None,
+		psf=0
 	):
 		"""Initialize ContourBin instance."""
 		self.filename = fitsfile
@@ -50,8 +53,15 @@ class ContourBin:
 		self.bkg_exposure_filename = bkg_exposure_filename
 		self.noisemap_filename = noisemap_filename
 		self.smoothed_filename = smoothed_filename
-		self.psf_filename = psf_filename
-		self.output_dir = f"contour_binning_sn{self.sn_ratio}_smooth{self.smooth}_constrain{self.constrain_val}"
+		# self.psf_filename = psf_filename
+
+		self.psf_arcsec = psf
+		self.psf = 0 # to store the pixel-psf
+
+		if self.psf_arcsec > 0:
+			self.output_dir = f"contour_binning_sn{self.sn_ratio}_smooth{self.smooth}_constrain{self.constrain_val}_psfasec{self.psf_arcsec}"
+		else:
+			self.output_dir = f"contour_binning_sn{self.sn_ratio}_smooth{self.smooth}_constrain{self.constrain_val}"
 
 		self.load_all_data()
 
@@ -101,7 +111,8 @@ class ContourBin:
 			in_image=self.source_data,
 			smoothed_image=self.smoothed_data,
 			threshold=self.sn_ratio,
-			output_dir=self.output_dir
+			output_dir=self.output_dir,
+			psf=self.psf
 		)
 		the_binner.set_back_image(self.bkg_data, self.exposuremap, self.bkgexpmap)
 		the_binner.set_noisemap_image(self.noisemap)
@@ -137,19 +148,23 @@ class ContourBin:
 		print(f"ContourBin process completed successfully!")
 
 		if make_region_files:
-			if ciaoversion_safe:
-				# Make region files
-				print(f"\nMaking polygon region files...")
-				the_binner.make_polygon_region_files()
-				print(f"Polygon region files created! Check {self.output_dir}/outreg_polygons for results...")
-			else:
-				print("Warning: CIAO not found. Skipping polygon region file creation.")
+			# Make region files
+			print(f"\nMaking polygon region files...")
+			the_binner.make_polygon_region_files()
+			print(f"Polygon region files created! Check {self.output_dir}/outreg_polygons for results...")
 
 	def load_all_data(self):
 		"""Load all required data for binning."""
 		# self.source_data, self.source_exposuretime = self.load_image(self.filename)
 		try:
 			self.source_data, self.source_exposuretime = self.load_image(self.filename)
+			with fits.open(self.filename) as hdul:
+				primary_header = hdul[0].header
+			
+			if self.psf_arcsec > 0:
+				self.psf = 2 * self.arcsec_to_pixels(self.psf_arcsec, primary_header) # Make it an approximate diameter
+				print(f"Given PSF: {self.psf_arcsec} arcsec, corresponds to radius ~ {self.psf:.2f} pixels. PSF constraint means bins will be have least 2x this size.")
+
 		except FileNotFoundError as e:
 			print(f"Error: Source file not found: {e}")
 			sys.exit(1)
@@ -201,13 +216,13 @@ class ContourBin:
 			self.noisemap = None  # Set to None if not provided
 		
 		# Load PSF map
-		if self.psf_filename:
-			print(f"Loading PSF map {self.psf_filename}")
-			self.psf_map, _ = self.load_image(self.psf_filename)
-			if not (self.source_data.shape == self.psf_map.shape):
-				raise ValueError("PSF map must have the same dimensions as the source image")
-		else:
-			self.psf_map = None
+		# if self.psf_filename:
+		# 	print(f"Loading PSF map {self.psf_filename}")
+		# 	self.psf_map, _ = self.load_image(self.psf_filename)
+		# 	if not (self.source_data.shape == self.psf_map.shape):
+		# 		raise ValueError("PSF map must have the same dimensions as the source image")
+		# else:
+		# 	self.psf_map = None
 
 		if not (self.source_data.shape == self.mask.shape == self.exposuremap.shape):
 			raise ValueError("Input images must have the same dimensions")
@@ -270,6 +285,31 @@ class ContourBin:
 		print("Done")
 		return mask
 
+	@staticmethod
+	def arcsec_to_pixels(psf_arcsec, header):
+		"""
+		Convert a PSF in arcseconds to pixel units,
+		given a FITS header that has standard WCS keywords.
+		"""
+		w = WCS(header)
+
+		# w.wcs.cdelt is a 2-element array: [CDELT1, CDELT2] in degrees/pixel
+		# We'll take the absolute value of e.g. CDELT1, because it could be negative
+		# depending on sky coordinate conventions.
+
+		# If w.wcs.cdelt is not present or not standard, you may need to handle
+		# PC/CD matrix or other advanced WCS.
+		# For most typical images, this is sufficient:
+		cdelt_deg_per_pix = abs(w.wcs.cdelt[0])  # degrees per pixel in X direction
+		# (You could also average x & y if your pixels are not square, or use the y value.)
+
+		# Convert arcseconds to degrees
+		psf_deg = psf_arcsec / 3600.0
+
+		# Now convert degrees to pixels
+		psf_pix = psf_deg / cdelt_deg_per_pix
+
+		return psf_pix
 
 	@staticmethod
 	def error_sqd_est(c):
@@ -374,13 +414,15 @@ class ContourBin:
 
 class BinHelper:
 	"""Helper class for binning operations."""
-	def __init__(self, in_image, smoothed_image, bins_image, threshold, psf_map=None, output_dir='.'):
+	def __init__(self, in_image, smoothed_image, bins_image, threshold, psf_map=None, output_dir='.', psf=0):
 		self.in_image = in_image
 		self.smoothed_image = smoothed_image
 		self.bins_image = bins_image
 		self.threshold = threshold
-		self.psf_map = psf_map
+		# self.psf_map = psf_map
 		self.output_dir = output_dir
+		self.psf = psf
+
 
 		self.xw = in_image.shape[1]
 		self.yw = in_image.shape[0]
@@ -427,9 +469,9 @@ class BinHelper:
 		"""Set mask image."""
 		self.mask_image = mask_image
 
-	def set_psf_map(self, psf_map):
-		"""Set the PSF map."""
-		self.psf_map = psf_map
+	# def set_psf_map(self, psf_map):
+	# 	"""Set the PSF map."""
+	# 	self.psf_map = psf_map
 
 	def set_constrain_fill(self, constrain_val):
 		"""Set constraint fill value."""
@@ -522,6 +564,107 @@ class Bin:
 		self.all_points.clear()
 		self.edge_points.clear()
 
+	def passes_psf_constraint(self):
+		"""
+		Returns True if this bin satisfies the minimum bounding-box size 
+		set by self.helper.psf.  (If psf <= 0, always True.)
+		"""
+		if self.helper.psf <= 0:
+			return True
+
+		if not self.all_points:
+			return False
+		
+		# Grab x and y from the points in the bin
+		xs = [p[0] for p in self.all_points]
+		ys = [p[1] for p in self.all_points]
+
+		width = max(xs) - min(xs) + 1
+		height = max(ys) - min(ys) + 1
+
+		# We require both width and height to be >= psf
+		return (width >= self.helper.psf and height >= self.helper.psf)
+
+	def merge_into_best_neighbor(self):
+		"""
+		Force-merge this bin into a neighbor bin.
+		We repeatedly find the 'best neighbor' pixel-by-pixel
+		until all pixels in this bin are reassigned.
+		"""
+		# We'll do a while loop that removes points one at a time.
+		while self.count > 0:
+			bestx, besty, bestbin_no = self._find_best_neighbor_pixel(allow_unconstrained=True)
+			if bestbin_no < 0:
+				# We cannot find any neighbor for the *remaining* pixels
+				print(f"WARNING: Could not fully dissolve bin {self.bin_no} "
+					  "because no valid neighbors remain.")
+				break
+			# Move that pixel out of this bin, into the neighbor bin
+			self.remove_point(bestx, besty)
+			self.helper.bins[bestbin_no].add_point(bestx, besty)
+
+	def _find_best_neighbor_pixel(self, allow_unconstrained=False):
+		"""
+		Find the (x, y) in this bin whose neighbor is best matched 
+		in smoothed flux. Return that neighbor's bin number.
+		Logic is adapted from the scrubbing code's 'find_best_neighbour'.
+
+		If 'allow_unconstrained' is False, we also respect
+		the 'check_constraint()' if self.helper.constrain_fill is True.
+		"""
+		smoothed_image = self.helper.smoothed_image
+		bins_image = self.helper.bins_image
+		binno = self.bin_no
+
+		best_delta = float('inf')
+		best_x = -1
+		best_y = -1
+		best_bin = -1
+
+		# We go through self.edge_points to find a pixel whose neighbor
+		# belongs to a different bin with the most similar smoothed flux.
+		# If some edge_points are no longer edges, they will be pruned.
+		# If this bin is empty, it won't even enter.
+
+		idx = 0
+		while idx < len(self.edge_points):
+			x, y = self.edge_points[idx]
+			v = smoothed_image[y, x]
+			is_still_edge = False
+
+			# check 4 neighbors (or 8, your choice)
+			for n in range(self.bin_no_neigh):
+				xp = x + self.bin_neigh_x[n]
+				yp = y + self.bin_neigh_y[n]
+				if not (0 <= xp < self.helper.xw and 0 <= yp < self.helper.yw):
+					continue
+
+				nb = bins_image[yp, xp]
+				if nb != -1 and nb != binno:
+					# So (x,y) is indeed an edge w.r.t. another bin
+					is_still_edge = True
+
+					# If constraints are active, skip if we fail them
+					if (self.helper.constrain_fill and not allow_unconstrained):
+						if not self.helper.bins[nb].check_constraint(xp, yp):
+							continue
+
+					# Score by how close the smoothed flux is
+					delta = abs(v - smoothed_image[yp, xp])
+					if delta < best_delta:
+						best_delta = delta
+						best_x = x
+						best_y = y
+						best_bin = nb
+
+			# If it wasn't an edge, remove from self.edge_points
+			if not is_still_edge:
+				self.edge_points.pop(idx)
+			else:
+				idx += 1
+
+		return best_x, best_y, best_bin
+
 	def do_binning(self, x, y):
 		"""Perform binning starting from a seed point."""
 		self._aimval = self.helper.smoothed_image[y, x]
@@ -529,9 +672,17 @@ class Bin:
 
 		sn_threshold_2 = self.helper.threshold * self.helper.threshold
 
-		while self.sn_2() < sn_threshold_2:
+		# We'll continue adding until we achieve both S/N and PSF constraints:
+		while (self.sn_2() < sn_threshold_2) or (not self.passes_psf_constraint()):
+			# If we cannot add more pixels but still haven't met constraints, break. # You could optionally handle it differently (e.g. force a merge).
 			if not self.add_next_pixel():
 				break
+		
+		if not self.passes_psf_constraint():
+			print(f"Warning: Bin {self.bin_no} is too small for psf={self.helper.psf}, forcibly merging.")
+			self.merge_into_best_neighbor()
+			if self.count == 0:
+				self.bin_no = -1
 
 	def count(self):
 		return self.count
@@ -712,18 +863,20 @@ class Bin:
 		
 class Binner:
 	"""Class responsible for performing the binning process."""
-	def __init__(self, in_image, smoothed_image, threshold, output_dir='.'):
+	def __init__(self, in_image, smoothed_image, threshold, output_dir='.', psf=0):
 		self.xw = in_image.shape[1]
 		self.yw = in_image.shape[0]
 		self.bins_image = np.full((self.yw, self.xw), -1, dtype=int)
 		self.binned_image = np.zeros((self.yw, self.xw))
 		self.sn_image = np.zeros((self.yw, self.xw))
-		self.bin_helper = BinHelper(in_image, smoothed_image, self.bins_image, threshold)
+		self.bin_helper = BinHelper(in_image, smoothed_image, self.bins_image, threshold, psf=psf)
 		self.bin_counter = 0
 		self.bins = []
 		self.sorted_pixels = []
 		self.sorted_pix_posn = 0
 		self.output_dir = output_dir
+
+		self.bin_helper.bins = self.bins
 
 	def set_back_image(self, back_image, expmap_image, bg_expmap_image):
 		"""Set background images."""
@@ -1201,7 +1354,8 @@ class Scrubber:
 		print("\nStarting renumbering...")
 
 		# split bins into those with counts and those without
-		self.bins = [bin for bin in self.bins if bin.count > 0]
+		# self.bins = [bin for bin in self.bins if bin.count > 0]
+		self.bins = [b for b in self.bins if b.count > 0 and b.bin_no >= 0]
 
 		# now clear bin image, and repaint everything (doing renumber)
 		self._helper.bins_image.fill(-1)
@@ -1213,3 +1367,4 @@ class Scrubber:
 			number += 1
 
 		print(f"{number} bins when finished\n Done.")
+
